@@ -620,11 +620,13 @@ function buildCatGrid(f,key,cats,btnClass) {
   wrap.appendChild(h("div",{class:"section-label"},"¿En qué?"));
   const grid=h("div",{class:"cat-grid"});
   cats.forEach(c=>{
-    const btn=h("div",{class:btnClass+(f.cat?.id===c.id?" selected":""),onclick:()=>{ state[key].cat=c; render(); }},
+    const isSelected = state[key].cat?.id===c.id;
+    const btn=h("button",{class:btnClass+(isSelected?" selected":""),onclick:()=>{ state[key].cat=c; render(); }},
       h("span",{class:"cat-btn-emoji"},c.emoji),
       h("span",{class:"cat-btn-label"},c.label)
     );
-    if(f.cat?.id===c.id) { btn.style.background=(c.color||"#6366f1")+"33"; btn.style.borderColor=c.color||"#6366f1"; }
+    btn.style.border = "1.5px solid "+(isSelected?(c.color||"#6366f1"):"#1e293b");
+    if(isSelected) btn.style.background=(c.color||"#6366f1")+"33";
     grid.appendChild(btn);
   });
   wrap.appendChild(grid);
@@ -662,8 +664,8 @@ function buildDetailInput(f,key,placeholder) {
 }
 
 function buildSaveBtn(label,bg,disabled,onClick) {
-  const btn=h("button",{class:"save-btn",style:{background:bg},onclick:onClick},label);
-  btn.disabled=disabled;
+  const btn=h("button",{class:"save-btn",style:{background:bg,opacity:disabled?"0.4":"1"},onclick:()=>{ if(!btn.disabled) onClick(); }},label);
+  btn.disabled=false; // never disable, handle visually only
   return btn;
 }
 
