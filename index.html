@@ -394,8 +394,9 @@ function buildResumen(catBreakdown,totalExpense,medios,impuestosTotal) {
   const lisBox = h("div",{class:"lisandro-box"},
     h("div",{class:"lisandro-title"},"🤝 Compartido con Lisandro"),
     h("div",{class:"lis-row"},h("span",{class:"lis-label"},"Pagué yo (Impuestos)"),h("span",{class:"lis-value"},fmtMoney(impuestosTotal))),
-    h("div",{class:"lis-row"},h("span",{class:"lis-label"},"Pagó Lisandro"),h("div",{class:"lis-input-wrap"},h("span",{},"$"),lisInput)),
-    lisNums
+    h("div",{class:"lis-row"},h("span",{class:"lis-label"},"Pagó Lisandro (su parte)"),h("div",{class:"lis-input-wrap"},h("span",{},"$"),lisInput)),
+    lisNums,
+    pagado ? h("div",{style:{marginTop:"8px",textAlign:"center",fontSize:"12px",color:"#475569"}},"Deuda saldada este mes") : null
   );
   wrap.appendChild(lisBox);
   return wrap;
@@ -516,7 +517,7 @@ function buildAddExpense() {
       buildAmountInput(f,"exp"),
       buildMedioInput(f,"exp"),
       buildDetailInput(f,"exp","ej: Carrefour, Farmacia..."),
-      buildSaveBtn("Guardar gasto","#dc2626",!f.cat||!f.amount,onSave)
+      buildSaveBtn("Guardar gasto","#dc2626",!state.exp.cat||!state.exp.amount,onSave)
     ]
   });
 }
@@ -541,7 +542,7 @@ function buildAddIncome() {
       buildCatGrid(f,"inc",INCOME_CATS,"inc-cat-btn"),
       buildAmountInput(f,"inc"),
       buildDetailInput(f,"inc","ej: Sueldo mayo..."),
-      buildSaveBtn("Guardar ingreso","#16a34a",!f.cat||!f.amount,onSave)
+      buildSaveBtn("Guardar ingreso","#16a34a",!state.inc.cat||!state.inc.amount,onSave)
     ]
   });
 }
@@ -581,7 +582,7 @@ function buildAddCuota() {
       h("div",{class:"section"},h("div",{class:"section-label"},"Primera cuota en"),monthInput),
       buildMedioInput(f,"cuotaForm"),
       buildDetailInput(f,"cuotaForm","ej: Zapatillas, TV Samsung..."),
-      buildSaveBtn("Registrar cuotas","#4f46e5",!f.cat||!f.total,onSave)
+      buildSaveBtn("Registrar cuotas","#4f46e5",!state.cuotaForm.cat||!state.cuotaForm.total,onSave)
     ]
   });
 }
