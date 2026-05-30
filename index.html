@@ -361,6 +361,7 @@ function buildResumen(catBreakdown,totalExpense,medios,impuestosTotal) {
   // Lisandro
   const lis = state.lisandroData[state.selMonth]||{monto:0};
   const lisMonto = lis.monto||0;
+  const pagado = lis.pagado||false;
   const totalComp = impuestosTotal+lisMonto;
   const miParte = Math.round(totalComp/2);
   const leMeDebe = impuestosTotal-miParte;
