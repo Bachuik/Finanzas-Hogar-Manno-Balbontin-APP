@@ -564,9 +564,11 @@ function buildAddExpense() {
     const date=f.dateMode==="today"?todayStr():f.dateMode==="yesterday"?yesterdayStr():f.customDate;
     state.transactions.push({type:"expense",category:f.cat.id,amount:parseInt(f.amount),medio:f.medio,detail:f.detail,date,id:Date.now()});
     saveTx().catch(e=>console.error(e));
-    state.exp={cat:null,amount:"",medio:"Efectivo",detail:"",dateMode:"today",customDate:todayStr(),saved:true};
-    render();
-    setTimeout(()=>{ state.exp.saved=false; render(); },900);
+    // Reset form fields after 3s so user can keep adding
+    setTimeout(()=>{
+      state.exp={cat:null,amount:"",medio:"Efectivo",detail:"",dateMode:"today",customDate:todayStr(),saved:false};
+      render();
+    }, 3100);
   };
   return buildForm({
     headerBg:"#1a0a1e", title:"Nuevo Gasto", savedBg:"#14532d", savedColor:"#4ade80",
@@ -590,9 +592,10 @@ function buildAddIncome() {
     const date=f.dateMode==="today"?todayStr():f.dateMode==="yesterday"?yesterdayStr():f.customDate;
     state.transactions.push({type:"income",category:f.cat.id,amount:parseInt(f.amount),detail:f.detail,date,id:Date.now()});
     saveTx().catch(e=>console.error(e));
-    state.inc={cat:null,amount:"",detail:"",dateMode:"today",customDate:todayStr(),saved:true};
-    render();
-    setTimeout(()=>{ state.inc.saved=false; render(); },900);
+    setTimeout(()=>{
+      state.inc={cat:null,amount:"",detail:"",dateMode:"today",customDate:todayStr(),saved:false};
+      render();
+    }, 3100);
   };
   return buildForm({
     headerBg:"#052e16", title:"Nuevo Ingreso", savedBg:"#166534", savedColor:"#4ade80",
@@ -615,9 +618,10 @@ function buildAddCuota() {
     if(!f.cat||!f.total) return;
     state.cuotas.push({category:f.cat.id,totalAmount:parseInt(f.total),totalCuotas:f.numCuotas,medio:f.medio,detail:f.detail,startMonth:f.startMonth,id:Date.now()});
     saveCuotas().catch(e=>console.error(e));
-    state.cuotaForm={cat:null,total:"",numCuotas:3,medio:"Visa",detail:"",startMonth:currentMonth(),saved:true};
-    render();
-    setTimeout(()=>{ state.cuotaForm.saved=false; render(); },900);
+    setTimeout(()=>{
+      state.cuotaForm={cat:null,total:"",numCuotas:3,medio:"Visa",detail:"",startMonth:currentMonth(),saved:false};
+      render();
+    }, 3100);
   };
 
   const cuotaOpts=h("div",{});
@@ -723,8 +727,28 @@ function buildDetailInput(f,key,placeholder) {
 }
 
 function buildSaveBtn(label,bg,disabled,onClick) {
-  const btn=h("button",{class:"save-btn",style:{background:bg,opacity:disabled?"0.4":"1"},onclick:()=>{ if(!btn.disabled) onClick(); }},label);
-  btn.disabled=false; // never disable, handle visually only
+  let saving = false;
+  const btn = h("button",{class:"save-btn",style:{background:bg,opacity:"1",transition:"opacity 0.15s"}},label);
+  btn.onclick = () => {
+    if(saving) return; // prevent double tap
+    if(disabled) {
+      // Flash to indicate missing fields
+      btn.style.background = "#475569";
+      setTimeout(()=>{ btn.style.background = bg; }, 400);
+      return;
+    }
+    saving = true;
+    btn.style.opacity = "0.4";
+    btn.textContent = "✓ Guardado";
+    btn.style.background = "#16a34a";
+    setTimeout(()=>{
+      btn.style.opacity = "1";
+      btn.style.background = bg;
+      btn.textContent = label;
+      saving = false;
+      onClick();
+    }, 700);
+  };
   return btn;
 }
 
