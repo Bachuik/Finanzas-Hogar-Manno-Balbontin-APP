@@ -568,7 +568,7 @@ function buildAddExpense() {
     setTimeout(()=>{
       state.exp={cat:null,amount:"",medio:"Efectivo",detail:"",dateMode:"today",customDate:todayStr(),saved:false};
       render();
-    }, 3100);
+    }, 1100);
   };
   return buildForm({
     headerBg:"#1a0a1e", title:"Nuevo Gasto", savedBg:"#14532d", savedColor:"#4ade80",
@@ -579,7 +579,7 @@ function buildAddExpense() {
       buildAmountInput(f,"exp"),
       buildMedioInput(f,"exp"),
       buildDetailInput(f,"exp","ej: Carrefour, Farmacia..."),
-      buildSaveBtn("Guardar gasto","#dc2626",!state.exp.cat||!state.exp.amount,onSave)
+      buildSaveBtn("Guardar gasto","#dc2626",()=>!state.exp.cat||!state.exp.amount,onSave)
     ]
   });
 }
@@ -595,7 +595,7 @@ function buildAddIncome() {
     setTimeout(()=>{
       state.inc={cat:null,amount:"",detail:"",dateMode:"today",customDate:todayStr(),saved:false};
       render();
-    }, 3100);
+    }, 1100);
   };
   return buildForm({
     headerBg:"#052e16", title:"Nuevo Ingreso", savedBg:"#166534", savedColor:"#4ade80",
@@ -605,7 +605,7 @@ function buildAddIncome() {
       buildCatGrid(f,"inc",INCOME_CATS,"inc-cat-btn"),
       buildAmountInput(f,"inc"),
       buildDetailInput(f,"inc","ej: Sueldo mayo..."),
-      buildSaveBtn("Guardar ingreso","#16a34a",!state.inc.cat||!state.inc.amount,onSave)
+      buildSaveBtn("Guardar ingreso","#16a34a",()=>!state.inc.cat||!state.inc.amount,onSave)
     ]
   });
 }
@@ -621,7 +621,7 @@ function buildAddCuota() {
     setTimeout(()=>{
       state.cuotaForm={cat:null,total:"",numCuotas:3,medio:"Visa",detail:"",startMonth:currentMonth(),saved:false};
       render();
-    }, 3100);
+    }, 1100);
   };
 
   const cuotaOpts=h("div",{});
@@ -646,7 +646,7 @@ function buildAddCuota() {
       h("div",{class:"section"},h("div",{class:"section-label"},"Primera cuota en"),monthInput),
       buildMedioInput(f,"cuotaForm"),
       buildDetailInput(f,"cuotaForm","ej: Zapatillas, TV Samsung..."),
-      buildSaveBtn("Registrar cuotas","#4f46e5",!state.cuotaForm.cat||!state.cuotaForm.total,onSave)
+      buildSaveBtn("Registrar cuotas","#4f46e5",()=>!state.cuotaForm.cat||!state.cuotaForm.total,onSave)
     ]
   });
 }
@@ -726,8 +726,9 @@ function buildDetailInput(f,key,placeholder) {
   return wrap;
 }
 
-function buildSaveBtn(label,bg,disabled,onClick) {
+function buildSaveBtn(label,bg,disabledOrFn,onClick) {
   let saving = false;
+  const getDisabled = typeof disabledOrFn === "function" ? disabledOrFn : () => disabledOrFn;
   const btn = h("button",{class:"save-btn",style:{background:bg,opacity:"1",transition:"opacity 0.15s"}},label);
   btn.onclick = () => {
     if(saving) return; // prevent double tap
