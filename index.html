@@ -731,24 +731,23 @@ function buildSaveBtn(label,bg,disabledOrFn,onClick) {
   const getDisabled = typeof disabledOrFn === "function" ? disabledOrFn : () => disabledOrFn;
   const btn = h("button",{class:"save-btn",style:{background:bg,opacity:"1",transition:"opacity 0.15s"}},label);
   btn.onclick = () => {
-    if(saving) return; // prevent double tap
-    if(disabled) {
-      // Flash to indicate missing fields
+    if(saving) return;
+    const isDisabled = getDisabled();
+    if(isDisabled) {
       btn.style.background = "#475569";
       setTimeout(()=>{ btn.style.background = bg; }, 400);
       return;
     }
     saving = true;
-    btn.style.opacity = "0.4";
-    btn.textContent = "✓ Guardado";
+    onClick();
+    btn.textContent = "✓ Listo";
     btn.style.background = "#16a34a";
+    btn.style.opacity = "1";
     setTimeout(()=>{
-      btn.style.opacity = "1";
-      btn.style.background = bg;
       btn.textContent = label;
+      btn.style.background = bg;
       saving = false;
-      onClick();
-    }, 700);
+    }, 1000);
   };
   return btn;
 }
