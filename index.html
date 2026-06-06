@@ -246,15 +246,18 @@ async function loadData() {
 
 async function saveTx() {
   const newTxs = state.transactions.filter(t=>t.id>1700000000500);
-  // Upsert all new transactions
   if(newTxs.length > 0) {
-    await _supa.from("transactions").upsert(
-      newTxs.map(t => ({
-        id: t.id, type: t.type, date: t.date,
-        category: t.category, amount: t.amount,
-        medio: t.medio||null, detail: t.detail||null
-      }))
-    );
+    const rows = newTxs.map(t => ({
+      id: Math.floor(t.id), 
+      type: t.type, 
+      date: t.date,
+      category: t.category, 
+      amount: t.amount,
+      medio: t.medio||null, 
+      detail: t.detail||null
+    }));
+    const {error} = await _supa.from("transactions").upsert(rows);
+    if(error) console.error("Supabase saveTx error:", error.message, error);
   }
 }
 
@@ -962,8 +965,9 @@ function buildAddTarjeta() {
       if(saving) return;
       saving = true;
       const date = f.dateMode==="today"?todayStr():f.dateMode==="yesterday"?yesterdayStr():f.customDate;
-      f.items.forEach(item=>{
-        state.transactions.push({type:"expense",category:item.category,amount:item.amount,medio:f.medio,detail:item.detail,date,id:Date.now()+Math.random()});
+      const baseId = Date.now();
+      f.items.forEach((item,idx)=>{
+        state.transactions.push({type:"expense",category:item.category,amount:item.amount,medio:f.medio,detail:item.detail,date,id:baseId+idx});
       });
       saveTx().catch(e=>console.error(e));
       saveBtn.textContent = "✓ Listo";
