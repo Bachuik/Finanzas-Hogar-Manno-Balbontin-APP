@@ -189,6 +189,7 @@ const h = el;
 // ── STATE
 let state = {
   view: "home",
+  tarjetaForm: { medio:"Visa", dateMode:"today", customDate:null, items:[] },
   transactions: [],
   cuotas: [],
   lisandroData: {},
@@ -367,6 +368,7 @@ function buildHome() {
   const fabs = h("div",{class:"fab-row"},
     h("button",{class:"fab fab-red",onclick:()=>setState({view:"addExpense"})},"− Gasto"),
     h("button",{class:"fab fab-green",onclick:()=>setState({view:"addIncome"})},"+ Ingreso"),
+    h("button",{class:"fab",style:{background:"#f59e0b",color:"#111",flex:"1",padding:"13px 6px",borderRadius:"14px",border:"none",fontSize:"13px",fontWeight:"700",fontFamily:"'Syne',sans-serif",letterSpacing:"-.3px"},onclick:()=>setState({view:"addTarjeta"})},"💳 Tarjeta"),
     h("button",{class:"fab fab-purple",onclick:()=>setState({view:"addCuota"})},"🔁 Cuotas")
   );
 
@@ -750,6 +752,138 @@ function buildSaveBtn(label,bg,disabledOrFn,onClick) {
     }, 1000);
   };
   return btn;
+}
+
+// ── ADD TARJETA
+function buildAddTarjeta() {
+  const f = state.tarjetaForm;
+  if(!f.customDate) f.customDate = todayStr();
+  const total = f.items.reduce((s,i)=>s+i.amount,0);
+
+  const wrap = h("div",{class:"screen"});
+
+  // Header
+  wrap.appendChild(h("div",{class:"form-header",style:{background:"#1a1200"}},
+    h("button",{class:"back-btn",onclick:()=>setState({view:"home"})},"← Volver"),
+    h("span",{class:"form-title"},"💳 Carga por Tarjeta")
+  ));
+
+  const body = h("div",{class:"form-body"});
+
+  // Medio selector
+  const medioSection = h("div",{class:"section"});
+  medioSection.appendChild(h("div",{class:"section-label"},"¿Qué tarjeta?"));
+  const medioRow = h("div",{class:"medio-row"});
+  MEDIOS.forEach(m=>{
+    const btn = h("button",{class:"medio-btn"+(f.medio===m?" active":""),onclick:()=>{ state.tarjetaForm.medio=m; render(); }},m);
+    medioRow.appendChild(btn);
+  });
+  medioSection.appendChild(medioRow);
+  body.appendChild(medioSection);
+
+  // Fecha
+  body.appendChild(buildFormDate(f,"tarjetaForm"));
+
+  // Items list
+  if(f.items.length > 0) {
+    const listSection = h("div",{class:"section"});
+    listSection.appendChild(h("div",{class:"section-label"},"Items cargados"));
+    f.items.forEach((item,idx)=>{
+      const cat = EXPENSE_CATS.find(c=>c.id===item.category);
+      const row = h("div",{style:{display:"flex",alignItems:"center",gap:"8px",padding:"10px 0",borderBottom:"1px solid #1e293b"}},
+        h("span",{style:{fontSize:"20px"}},cat?.emoji||"💸"),
+        h("div",{style:{flex:"1",minWidth:"0"}},
+          h("span",{style:{display:"block",fontSize:"14px",fontWeight:"500",color:"#e2e8f0"}},item.detail||cat?.label||""),
+          h("span",{style:{display:"block",fontSize:"12px",color:"#475569"}},cat?.label||"")
+        ),
+        h("span",{style:{fontSize:"14px",fontWeight:"700",color:"#f87171"}},fmtMoney(item.amount)),
+        h("button",{style:{background:"transparent",border:"none",color:"#475569",fontSize:"13px",cursor:"pointer"},onclick:()=>{
+          state.tarjetaForm.items = state.tarjetaForm.items.filter((_,i)=>i!==idx);
+          render();
+        }},"🗑")
+      );
+      listSection.appendChild(row);
+    });
+    // Total
+    listSection.appendChild(h("div",{style:{display:"flex",justifyContent:"space-between",padding:"12px 0",marginTop:"4px"}},
+      h("span",{style:{fontSize:"15px",fontWeight:"700",color:"#f1f5f9"}},"Total"),
+      h("span",{style:{fontSize:"15px",fontWeight:"800",color:"#f59e0b"}},fmtMoney(total))
+    ));
+    body.appendChild(listSection);
+  }
+
+  // Add item section
+  const addSection = h("div",{class:"section"});
+  addSection.appendChild(h("div",{class:"section-label"},f.items.length===0?"Agregá el primer ítem":"Agregar otro ítem"));
+
+  // Mini cat grid
+  const catGrid = h("div",{class:"cat-grid",style:{marginBottom:"12px"}});
+  EXPENSE_CATS.forEach(c=>{
+    const isSelected = state.tarjetaForm.newCat?.id===c.id;
+    const btn = h("button",{class:"cat-btn"+(isSelected?" selected":""),onclick:()=>{ state.tarjetaForm.newCat=c; render(); }},
+      h("span",{class:"cat-btn-emoji"},c.emoji),
+      h("span",{class:"cat-btn-label"},c.label)
+    );
+    btn.style.border = "1.5px solid "+(isSelected?(c.color||"#6366f1"):"#1e293b");
+    if(isSelected) btn.style.background=(c.color||"#6366f1")+"33";
+    catGrid.appendChild(btn);
+  });
+  addSection.appendChild(catGrid);
+
+  // Amount input for new item
+  const amtWrap = h("div",{class:"amount-wrap",style:{marginBottom:"12px"}});
+  amtWrap.appendChild(h("span",{class:"amount-prefix"},"$"));
+  const amtInput = h("input",{type:"number",inputmode:"numeric",class:"amount-input",placeholder:"0",value:f.newAmount||""});
+  amtInput.addEventListener("input",e=>{ state.tarjetaForm.newAmount=e.target.value; });
+  amtWrap.appendChild(amtInput);
+  addSection.appendChild(amtWrap);
+
+  // Detail input for new item
+  const detailInput = h("input",{type:"text",class:"detail-input",style:{marginBottom:"12px"},placeholder:"Detalle (opcional)",value:f.newDetail||""});
+  detailInput.addEventListener("input",e=>{ state.tarjetaForm.newDetail=e.target.value; });
+  addSection.appendChild(detailInput);
+
+  // Add item button
+  const addBtn = h("button",{style:{width:"100%",padding:"12px",background:"#1e293b",border:"1px solid #334155",borderRadius:"12px",color:"#94a3b8",fontSize:"14px",fontWeight:"600",cursor:"pointer",marginBottom:"8px"},
+    onclick:()=>{
+      const cat = state.tarjetaForm.newCat;
+      const amt = parseInt(state.tarjetaForm.newAmount||"0");
+      if(!cat||!amt) return;
+      state.tarjetaForm.items.push({category:cat.id,amount:amt,detail:state.tarjetaForm.newDetail||""});
+      state.tarjetaForm.newCat=null;
+      state.tarjetaForm.newAmount="";
+      state.tarjetaForm.newDetail="";
+      render();
+    }},"+ Agregar ítem");
+  addSection.appendChild(addBtn);
+  body.appendChild(addSection);
+
+  // Save all button
+  if(f.items.length > 0) {
+    let saving = false;
+    const saveBtn = h("button",{class:"save-btn",style:{background:"#f59e0b",color:"#111"}},
+      `Guardar ${f.items.length} gasto${f.items.length>1?"s":""} · ${fmtMoney(total)}`
+    );
+    saveBtn.onclick = () => {
+      if(saving) return;
+      saving = true;
+      const date = f.dateMode==="today"?todayStr():f.dateMode==="yesterday"?yesterdayStr():f.customDate;
+      f.items.forEach(item=>{
+        state.transactions.push({type:"expense",category:item.category,amount:item.amount,medio:f.medio,detail:item.detail,date,id:Date.now()+Math.random()});
+      });
+      saveTx().catch(e=>console.error(e));
+      saveBtn.textContent = "✓ Listo";
+      saveBtn.style.background = "#16a34a";
+      setTimeout(()=>{
+        state.tarjetaForm={medio:"Visa",dateMode:"today",customDate:todayStr(),items:[],newCat:null,newAmount:"",newDetail:""};
+        setState({view:"home"});
+      },1000);
+    };
+    body.appendChild(saveBtn);
+  }
+
+  wrap.appendChild(body);
+  return wrap;
 }
 
 // ── BOOT
