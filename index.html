@@ -294,7 +294,7 @@ function detectCuota(detail) {
 
 function getInferredCuotas(transactions) {
   const groups={};
-  (transactions||[]).filter(t=>t.type==="expense").forEach(t=>{
+  (transactions||[]).filter(t=>t.type==="expense"&&monthKey(t.date)>="2026-06").forEach(t=>{
     const cuota=detectCuota(t.detail);
     if(!cuota) return;
     const baseName=(t.detail||"").replace(/(\d+)\/(\d+)/,"").replace(/[()]/g,"").trim();
