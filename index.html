@@ -325,8 +325,13 @@ let app;
 function render() {
   const root = document.getElementById("app");
   const newApp = buildView();
-  if(app) root.replaceChild(newApp,app);
-  else root.appendChild(newApp);
+  if(!newApp) return;
+  if(app && app.parentNode === root) {
+    root.replaceChild(newApp, app);
+  } else {
+    root.innerHTML = "";
+    root.appendChild(newApp);
+  }
   app = newApp;
 }
 
