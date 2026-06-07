@@ -191,7 +191,7 @@ const h = el;
 // ── STATE
 let state = {
   view: "home",
-  tarjetaForm: { medio:"Visa", dateMode:"today", customDate:null, items:[] },
+  tarjetaForm: { medio:null, dateMode:"today", customDate:null, items:[] },
   transactions: [],
   cuotas: [],
   lisandroData: {},
@@ -202,6 +202,7 @@ let state = {
   confirmDelCuota: null,
   // Forms
   exp: { cat:null, amount:"", medio:"Efectivo", detail:"", dateMode:"today", customDate:todayStr(), saved:false },
+  editTx: null, // transaction being edited
   inc: { cat:null, amount:"", detail:"", dateMode:"today", customDate:todayStr(), saved:false },
   cuotaForm: { cat:null, total:"", numCuotas:3, medio:"Visa", detail:"", startMonth:currentMonth(), saved:false },
 };
@@ -382,6 +383,7 @@ function buildView() {
     case "addIncome":  return buildAddIncome();
     case "addCuota":   return buildAddCuota();
     case "addTarjeta": return buildAddTarjeta();
+    case "editTx":     return buildEditTx();
   }
 }
 
@@ -542,12 +544,17 @@ function buildTxRow(tx) {
 
   const right=h("div",{class:"tx-right"},h("span",{class:"tx-amount",style:{color:amtColor}},amtTxt));
   if(!tx.isCuota) {
-    const delId = "del-"+tx.id;
-    const delBtn=h("button",{class:"del-btn",id:delId,onclick:()=>{
+    // Edit button
+    const editBtn = h("button",{style:{background:"transparent",border:"none",fontSize:"13px",cursor:"pointer",color:"#6366f1",padding:"2px 4px"},
+      onclick:()=>setState({view:"editTx",editTx:{...tx}})
+    },"✏️");
+    right.appendChild(editBtn);
+    // Delete button
+    const delBtn=h("button",{class:"del-btn",onclick:()=>{
       if(state.confirmDelete===tx.id) {
-        const deleted = state.transactions.find(t=>t.id===tx.id);
+        const deleted=state.transactions.find(t=>t.id===tx.id);
         state.transactions=state.transactions.filter(t=>t.id!==tx.id);
-        if(deleted && deleted.id>1700000000500) _supa.from("transactions").delete().eq("id",deleted.id).then(()=>{});
+        if(deleted&&deleted.id>1700000000500) _supa.from("transactions").delete().eq("id",deleted.id).then(()=>{});
         state.confirmDelete=null; render();
       } else { setState({confirmDelete:tx.id}); }
     }},state.confirmDelete===tx.id?"✓ Borrar":"🗑");
@@ -972,13 +979,126 @@ function buildAddTarjeta() {
       saveBtn.textContent = "✓ Listo";
       saveBtn.style.background = "#16a34a";
       setTimeout(()=>{
-        state.tarjetaForm={medio:"Visa",dateMode:"today",customDate:todayStr(),items:[],newCat:null,newAmount:"",newDetail:""};
+        state.tarjetaForm={medio:null,dateMode:"today",customDate:todayStr(),items:[],newCat:null,newAmount:"",newDetail:""};
         setState({view:"home"});
       },1000);
     };
     body.appendChild(saveBtn);
   }
 
+  wrap.appendChild(body);
+  return wrap;
+}
+
+// ── EDIT TRANSACTION
+function buildEditTx() {
+  const tx = state.editTx;
+  if(!tx) { setState({view:"home"}); return h("div",{}); }
+
+  const isExpense = tx.type==="expense";
+  const cats = isExpense ? EXPENSE_CATS : INCOME_CATS;
+  let selCat = cats.find(c=>c.id===tx.category)||null;
+  let amount = String(tx.amount||"");
+  let medio = tx.medio||"Efectivo";
+  let detail = tx.detail||"";
+  let dateVal = tx.date||todayStr();
+
+  const wrap = h("div",{class:"screen"});
+  const headerBg = isExpense?"#1a0a1e":"#052e16";
+  wrap.appendChild(h("div",{class:"form-header",style:{background:headerBg}},
+    h("button",{class:"back-btn",onclick:()=>setState({view:"home",editTx:null})},"← Volver"),
+    h("span",{class:"form-title"},"✏️ Editar movimiento")
+  ));
+
+  const body = h("div",{class:"form-body"});
+
+  // Date
+  const dateSection = h("div",{class:"section"});
+  dateSection.appendChild(h("div",{class:"section-label"},"Fecha"));
+  const dateInput = h("input",{type:"date",class:"date-input",value:dateVal});
+  dateInput.addEventListener("change",e=>{ dateVal=e.target.value; });
+  dateSection.appendChild(dateInput);
+  body.appendChild(dateSection);
+
+  // Category
+  const catSection = h("div",{class:"section"});
+  catSection.appendChild(h("div",{class:"section-label"},"Categoría"));
+  const catGrid = h("div",{class:"cat-grid"});
+  const catBtns = {};
+  cats.forEach(c=>{
+    const isSelected = c.id===tx.category;
+    const btn = h("button",{class:"cat-btn"+(isSelected?" selected":""),onclick:()=>{
+      selCat=c;
+      Object.values(catBtns).forEach(b=>{ b.style.background="#1a1a2e"; b.style.borderColor="#1e293b"; });
+      btn.style.background=(c.color||"#6366f1")+"33";
+      btn.style.borderColor=c.color||"#6366f1";
+    }},
+      h("span",{class:"cat-btn-emoji"},c.emoji),
+      h("span",{class:"cat-btn-label"},c.label)
+    );
+    if(isSelected){ btn.style.background=(c.color||"#6366f1")+"33"; btn.style.borderColor=c.color||"#6366f1"; }
+    catBtns[c.id]=btn;
+    catGrid.appendChild(btn);
+  });
+  catSection.appendChild(catGrid);
+  body.appendChild(catSection);
+
+  // Amount
+  const amtSection = h("div",{class:"section"});
+  amtSection.appendChild(h("div",{class:"section-label"},"Monto"));
+  const amtInput = h("input",{type:"number",inputmode:"numeric",class:"amount-input",placeholder:"0",value:amount});
+  amtInput.addEventListener("input",e=>{ amount=e.target.value; });
+  amtSection.appendChild(h("div",{class:"amount-wrap"},h("span",{class:"amount-prefix"},"$"),amtInput));
+  body.appendChild(amtSection);
+
+  // Medio (expense only)
+  if(isExpense) {
+    const medioSection = h("div",{class:"section"});
+    medioSection.appendChild(h("div",{class:"section-label"},"Medio de pago"));
+    const medioRow = h("div",{class:"medio-row"});
+    MEDIOS.forEach(m=>{
+      const btn=h("button",{class:"medio-btn"+(medio===m?" active":""),onclick:()=>{
+        medio=m;
+        medioRow.querySelectorAll("button").forEach(b=>b.className="medio-btn");
+        btn.className="medio-btn active";
+      }},m);
+      medioRow.appendChild(btn);
+    });
+    medioSection.appendChild(medioRow);
+    body.appendChild(medioSection);
+  }
+
+  // Detail
+  const detSection = h("div",{class:"section"});
+  detSection.appendChild(h("div",{class:"section-label"},"Detalle ",h("span",{class:"optional"},"(opcional)")));
+  const detInput = h("input",{type:"text",class:"detail-input",placeholder:"ej: Carrefour...",value:detail});
+  detInput.addEventListener("input",e=>{ detail=e.target.value; });
+  detSection.appendChild(detInput);
+  body.appendChild(detSection);
+
+  // Save button
+  let saving=false;
+  const saveBtn = h("button",{class:"save-btn",style:{background:isExpense?"#dc2626":"#16a34a"}},
+    "Guardar cambios"
+  );
+  saveBtn.onclick = ()=>{
+    if(saving) return;
+    saving=true;
+    const updated = {...tx, category:selCat?.id||tx.category, amount:parseInt(amount)||tx.amount, medio, detail, date:dateVal};
+    state.transactions = state.transactions.map(t=>t.id===tx.id?updated:t);
+    // Update in Supabase if it's a new tx
+    if(tx.id>1700000000500) {
+      _supa.from("transactions").upsert({
+        id:Math.floor(tx.id),type:updated.type,date:updated.date,
+        category:updated.category,amount:updated.amount,
+        medio:updated.medio||null,detail:updated.detail||null
+      }).then(({error})=>{ if(error) console.error("Edit error:",error.message); });
+    }
+    saveBtn.textContent="✓ Guardado";
+    saveBtn.style.background="#16a34a";
+    setTimeout(()=>setState({view:"home",editTx:null}),800);
+  };
+  body.appendChild(saveBtn);
   wrap.appendChild(body);
   return wrap;
 }
