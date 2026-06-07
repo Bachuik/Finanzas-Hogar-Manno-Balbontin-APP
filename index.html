@@ -424,8 +424,7 @@ function buildHome() {
   const fabs = h("div",{class:"fab-row"},
     h("button",{class:"fab fab-red",onclick:()=>setState({view:"addExpense"})},"− Gasto"),
     h("button",{class:"fab fab-green",onclick:()=>setState({view:"addIncome"})},"+ Ingreso"),
-    h("button",{class:"fab",style:{background:"#f59e0b",color:"#111",flex:"1",padding:"13px 6px",borderRadius:"14px",border:"none",fontSize:"13px",fontWeight:"700",fontFamily:"'Syne',sans-serif",letterSpacing:"-.3px"},onclick:()=>setState({view:"addTarjeta"})},"💳 Tarjeta"),
-    h("button",{class:"fab fab-purple",onclick:()=>setState({view:"addCuota"})},"🔁 Cuotas")
+    h("button",{class:"fab",style:{background:"#f59e0b",color:"#111",flex:"1",padding:"13px 6px",borderRadius:"14px",border:"none",fontSize:"13px",fontWeight:"700",fontFamily:"'Syne',sans-serif",letterSpacing:"-.3px"},onclick:()=>setState({view:"addTarjeta"})},"💳 Tarjeta")
   );
 
   const tabNames = {resumen:"Resumen",movimientos:"Movimientos",cuotas:"Mis Cuotas"};
