@@ -303,18 +303,22 @@ function getInferredCuotas(transactions) {
   (transactions||[]).filter(t=>t.type==="expense"&&monthKey(t.date)>="2026-06").forEach(t=>{
     const cuota=detectCuota(t.detail);
     if(!cuota) return;
+    // Normalize base name: lowercase, no spaces, no special chars
     const baseName=(t.detail||"").replace(/(\d+)\/(\d+)/,"").replace(/[()]/g,"").trim();
-    const key=baseName+"|"+t.category+"|"+(t.medio||"");
+    const normalizedKey=baseName.toLowerCase().replace(/\s+/g,"");
+    // Group only by normalized name (flexible matching regardless of category/medio changes)
+    const key=normalizedKey;
     if(!groups[key]) groups[key]={baseName,category:t.category,medio:t.medio,total:cuota.total,entries:[]};
+    // Update total in case it changed
+    if(cuota.total>groups[key].total) groups[key].total=cuota.total;
     groups[key].entries.push({...t,cuotaNum:cuota.current});
   });
-  return Object.values(groups).filter(g=>{
+  return Object.values(groups).map(g=>{
     const maxPaid=Math.max(...g.entries.map(e=>e.cuotaNum));
-    return maxPaid<g.total;
-  }).map(g=>{
-    const maxPaid=Math.max(...g.entries.map(e=>e.cuotaNum));
-    const lastEntry=g.entries.find(e=>e.cuotaNum===maxPaid);
-    return {...g,maxPaid,remaining:g.total-maxPaid,amount:lastEntry?.amount||0};
+    const lastEntry=g.entries.sort((a,b)=>b.cuotaNum-a.cuotaNum)[0];
+    const completed = maxPaid>=g.total;
+    return {...g,maxPaid,remaining:g.total-maxPaid,amount:lastEntry?.amount||0,completed};
+  // Show active AND completed (completed ones show as "✓ Terminada")
   }).sort((a,b)=>b.remaining-a.remaining);
 }
 
@@ -643,14 +647,18 @@ function buildCuotasPanel(transactions) {
             h("span",{style:{display:"block",fontSize:"12px",color:"#475569",marginTop:"2px"}},(cat?.label||"")+" · "+(g.medio||""))
           ),
           h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}},
-            h("span",{style:{fontSize:"14px",fontWeight:"700",color:"#f87171"}},fmtMoney(g.amount)+"/mes"),
-            h("span",{style:{fontSize:"11px",color:"#a5b4fc"}},g.remaining+" cuotas restantes")
+            g.completed
+              ? h("span",{style:{fontSize:"13px",color:"#4ade80",fontWeight:"600"}},"✓ Pagada")
+              : h("span",{style:{fontSize:"14px",fontWeight:"700",color:"#f87171"}},fmtMoney(g.amount)+"/mes"),
+            h("span",{style:{fontSize:"11px",color:"#a5b4fc"}},g.completed?"0 restantes":g.remaining+" cuotas restantes")
           )
         ),
         h("div",{},
           h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:"6px"}},
             h("span",{style:{fontSize:"12px",color:"#94a3b8"}},g.maxPaid+"/"+g.total+" pagadas"),
-            h("span",{style:{fontSize:"12px",color:"#4ade80",fontWeight:"600"}},"● activa")
+            g.completed
+              ? h("span",{style:{fontSize:"12px",color:"#4ade80",fontWeight:"600"}},"✓ Terminada")
+              : h("span",{style:{fontSize:"12px",color:"#4ade80",fontWeight:"600"}},"● activa")
           ),
           h("div",{style:{height:"4px",background:"#1e293b",borderRadius:"4px",overflow:"hidden"}},
             h("div",{style:{height:"100%",borderRadius:"4px",width:pct+"%",background:cat?.color||"#6366f1"}})
@@ -863,19 +871,50 @@ function buildSaveBtn(label,bg,disabledOrFn,onClick) {
 function buildAddTarjeta() {
   const f = state.tarjetaForm;
   if(!f.customDate) f.customDate = todayStr();
+  if(!f.addedKeys) f.addedKeys = new Set();
   const total = f.items.reduce((s,i)=>s+i.amount,0);
 
+  // ── SMART SUGGESTIONS ──────────────────────────────────────
+  // 1. Pending cuotas: find next installment for each active series
+  const allCuotas = getInferredCuotas(state.transactions);
+  const pendingCuotas = allCuotas.filter(g=>!g.completed).map(g=>({
+    key: g.baseName.toLowerCase().replace(/\s+/g,""),
+    label: g.baseName+" "+(g.maxPaid+1)+"/"+g.total,
+    amount: g.amount,
+    category: g.category,
+    medio: g.medio,
+    detail: g.baseName+" "+(g.maxPaid+1)+"/"+g.total,
+    isCuotaSuggestion: true,
+  })).filter(s=>!f.addedKeys.has(s.key));
+
+  // 2. Recurring expenses: non-cuota items that appear in 2+ different months
+  const recurringMap = {};
+  state.transactions.filter(t=>t.type==="expense"&&monthKey(t.date)>="2026-06"&&!detectCuota(t.detail)).forEach(t=>{
+    const key = (t.detail||"").toLowerCase().trim();
+    if(!key) return;
+    if(!recurringMap[key]) recurringMap[key]={detail:t.detail,category:t.category,months:new Set(),lastAmount:t.amount,lastDate:t.date};
+    recurringMap[key].months.add(monthKey(t.date));
+    if(t.date>recurringMap[key].lastDate){ recurringMap[key].lastAmount=t.amount; recurringMap[key].lastDate=t.date; }
+  });
+  const recurring = Object.values(recurringMap)
+    .filter(r=>r.months.size>=2)
+    .map(r=>({key:r.detail.toLowerCase().trim(),label:r.detail,amount:r.lastAmount,category:r.category,detail:r.detail,isCuotaSuggestion:false}))
+    .filter(s=>!f.addedKeys.has(s.key));
+
+  // ── BUILD UI ───────────────────────────────────────────────
   const wrap = h("div",{class:"screen"});
 
-  // Header
   wrap.appendChild(h("div",{class:"form-header",style:{background:"#1a1200"}},
-    h("button",{class:"back-btn",onclick:()=>setState({view:"home"})},"← Volver"),
+    h("button",{class:"back-btn",onclick:()=>{
+      state.tarjetaForm.addedKeys=new Set();
+      setState({view:"home"});
+    }},"← Volver"),
     h("span",{class:"form-title"},"💳 Carga por Tarjeta")
   ));
 
   const body = h("div",{class:"form-body"});
 
-  // Medio selector
+  // Tarjeta selector
   const medioSection = h("div",{class:"section"});
   medioSection.appendChild(h("div",{class:"section-label"},"¿Qué tarjeta?"));
   const medioRow = h("div",{class:"medio-row"});
@@ -889,7 +928,86 @@ function buildAddTarjeta() {
   // Fecha
   body.appendChild(buildFormDate(f,"tarjetaForm"));
 
-  // Items list
+  // ── CUOTAS PENDIENTES ──────────────────────────────────────
+  if(pendingCuotas.length > 0) {
+    const cuotaSection = h("div",{class:"section"});
+    cuotaSection.appendChild(h("div",{class:"section-label"},"Cuotas pendientes"));
+    cuotaSection.appendChild(h("div",{style:{fontSize:"12px",color:"#64748b",marginBottom:"10px"}},"Tap para agregar directamente"));
+
+    pendingCuotas.forEach(s=>{
+      const cat = getCat(s.category);
+      const row = h("div",{style:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background:"#13131f",border:"1px solid rgba(99,102,241,0.3)",borderRadius:"12px",marginBottom:"8px",cursor:"pointer"}},
+        h("span",{style:{fontSize:"20px"}},cat?.emoji||"💳"),
+        h("div",{style:{flex:"1"}},
+          h("span",{style:{display:"block",fontSize:"14px",fontWeight:"600",color:"#e2e8f0"}},s.label),
+          h("span",{style:{display:"block",fontSize:"12px",color:"#64748b"}},cat?.label||"")
+        ),
+        h("div",{style:{textAlign:"right"}},
+          h("span",{style:{display:"block",fontSize:"14px",fontWeight:"700",color:"#f87171"}},fmtMoney(s.amount)),
+          h("span",{style:{fontSize:"11px",color:"#6366f1"}},"+ agregar")
+        )
+      );
+      row.onclick = () => {
+        // Allow editing amount before adding
+        const newAmt = prompt(`Monto para ${s.label}:`, s.amount);
+        if(newAmt===null) return;
+        const amt = parseInt(newAmt)||s.amount;
+        state.tarjetaForm.items.push({category:s.category,amount:amt,detail:s.detail});
+        state.tarjetaForm.addedKeys.add(s.key);
+        render();
+      };
+      cuotaSection.appendChild(row);
+    });
+    body.appendChild(cuotaSection);
+  }
+
+  // ── GASTOS RECURRENTES ─────────────────────────────────────
+  if(recurring.length > 0) {
+    const recSection = h("div",{class:"section"});
+    recSection.appendChild(h("div",{class:"section-label"},"Gastos frecuentes"));
+    recSection.appendChild(h("div",{style:{fontSize:"12px",color:"#64748b",marginBottom:"10px"}},"Aparecen todos los meses"));
+
+    // Search filter
+    const searchInput = h("input",{type:"text",class:"detail-input",style:{marginBottom:"10px"},placeholder:"Buscar..."});
+    let searchVal = "";
+    searchInput.addEventListener("input",e=>{ searchVal=e.target.value.toLowerCase(); updateRecList(); });
+    recSection.appendChild(searchInput);
+
+    const recList = h("div",{});
+    function updateRecList() {
+      recList.innerHTML="";
+      const filtered = recurring.filter(s=>!searchVal||s.label.toLowerCase().includes(searchVal));
+      filtered.forEach(s=>{
+        const cat = getCat(s.category);
+        const row = h("div",{style:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background:"#0f172a",border:"1px solid #1e293b",borderRadius:"12px",marginBottom:"8px",cursor:"pointer"}},
+          h("span",{style:{fontSize:"20px"}},cat?.emoji||"💸"),
+          h("div",{style:{flex:"1"}},
+            h("span",{style:{display:"block",fontSize:"14px",fontWeight:"500",color:"#e2e8f0"}},s.label),
+            h("span",{style:{display:"block",fontSize:"12px",color:"#64748b"}},cat?.label||"")
+          ),
+          h("div",{style:{textAlign:"right"}},
+            h("span",{style:{display:"block",fontSize:"14px",fontWeight:"700",color:"#f87171"}},fmtMoney(s.amount)),
+            h("span",{style:{fontSize:"11px",color:"#94a3b8"}},"+ agregar")
+          )
+        );
+        row.onclick = () => {
+          const newAmt = prompt(`Monto para ${s.label}:`, s.amount);
+          if(newAmt===null) return;
+          const amt = parseInt(newAmt)||s.amount;
+          state.tarjetaForm.items.push({category:s.category,amount:amt,detail:s.detail});
+          state.tarjetaForm.addedKeys.add(s.key);
+          render();
+        };
+        recList.appendChild(row);
+      });
+      if(!filtered.length) recList.appendChild(h("div",{style:{color:"#475569",fontSize:"13px",padding:"8px 0"}},"Sin coincidencias"));
+    }
+    updateRecList();
+    recSection.appendChild(recList);
+    body.appendChild(recSection);
+  }
+
+  // ── ITEMS YA CARGADOS ──────────────────────────────────────
   if(f.items.length > 0) {
     const listSection = h("div",{class:"section"});
     listSection.appendChild(h("div",{class:"section-label"},"Items cargados"));
@@ -909,7 +1027,6 @@ function buildAddTarjeta() {
       );
       listSection.appendChild(row);
     });
-    // Total
     listSection.appendChild(h("div",{style:{display:"flex",justifyContent:"space-between",padding:"12px 0",marginTop:"4px"}},
       h("span",{style:{fontSize:"15px",fontWeight:"700",color:"#f1f5f9"}},"Total"),
       h("span",{style:{fontSize:"15px",fontWeight:"800",color:"#f59e0b"}},fmtMoney(total))
@@ -917,11 +1034,10 @@ function buildAddTarjeta() {
     body.appendChild(listSection);
   }
 
-  // Add item section
+  // ── NUEVO ÍTEM MANUAL ──────────────────────────────────────
   const addSection = h("div",{class:"section"});
-  addSection.appendChild(h("div",{class:"section-label"},f.items.length===0?"Agregá el primer ítem":"Agregar otro ítem"));
+  addSection.appendChild(h("div",{class:"section-label"},"+ Cargar nuevo ítem"));
 
-  // Mini cat grid
   const catGrid = h("div",{class:"cat-grid",style:{marginBottom:"12px"}});
   EXPENSE_CATS.forEach(c=>{
     const isSelected = state.tarjetaForm.newCat?.id===c.id;
@@ -935,7 +1051,6 @@ function buildAddTarjeta() {
   });
   addSection.appendChild(catGrid);
 
-  // Amount input for new item
   const amtWrap = h("div",{class:"amount-wrap",style:{marginBottom:"12px"}});
   amtWrap.appendChild(h("span",{class:"amount-prefix"},"$"));
   const amtInput = h("input",{type:"number",inputmode:"numeric",class:"amount-input",placeholder:"0",value:f.newAmount||""});
@@ -943,12 +1058,10 @@ function buildAddTarjeta() {
   amtWrap.appendChild(amtInput);
   addSection.appendChild(amtWrap);
 
-  // Detail input for new item
   const detailInput = h("input",{type:"text",class:"detail-input",style:{marginBottom:"12px"},placeholder:"Detalle (opcional)",value:f.newDetail||""});
   detailInput.addEventListener("input",e=>{ state.tarjetaForm.newDetail=e.target.value; });
   addSection.appendChild(detailInput);
 
-  // Add item button
   const addBtn = h("button",{style:{width:"100%",padding:"12px",background:"#1e293b",border:"1px solid #334155",borderRadius:"12px",color:"#94a3b8",fontSize:"14px",fontWeight:"600",cursor:"pointer",marginBottom:"8px"},
     onclick:()=>{
       const cat = state.tarjetaForm.newCat;
@@ -963,7 +1076,7 @@ function buildAddTarjeta() {
   addSection.appendChild(addBtn);
   body.appendChild(addSection);
 
-  // Save all button
+  // ── GUARDAR TODO ───────────────────────────────────────────
   if(f.items.length > 0) {
     let saving = false;
     const saveBtn = h("button",{class:"save-btn",style:{background:"#f59e0b",color:"#111"}},
@@ -981,7 +1094,7 @@ function buildAddTarjeta() {
       saveBtn.textContent = "✓ Listo";
       saveBtn.style.background = "#16a34a";
       setTimeout(()=>{
-        state.tarjetaForm={medio:null,dateMode:"today",customDate:todayStr(),items:[],newCat:null,newAmount:"",newDetail:""};
+        state.tarjetaForm={medio:null,dateMode:"today",customDate:todayStr(),items:[],newCat:null,newAmount:"",newDetail:"",addedKeys:new Set()};
         setState({view:"home"});
       },1000);
     };
