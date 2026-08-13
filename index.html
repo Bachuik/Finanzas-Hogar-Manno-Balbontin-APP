@@ -877,15 +877,25 @@ function buildAddTarjeta() {
   // ── SMART SUGGESTIONS ──────────────────────────────────────
   // 1. Pending cuotas: find next installment for each active series
   const allCuotas = getInferredCuotas(state.transactions);
-  const pendingCuotas = allCuotas.filter(g=>!g.completed).map(g=>({
-    key: g.baseName.toLowerCase().replace(/\s+/g,""),
-    label: g.baseName+" "+(g.maxPaid+1)+"/"+g.total,
-    amount: g.amount,
-    category: g.category,
-    medio: g.medio,
-    detail: g.baseName+" "+(g.maxPaid+1)+"/"+g.total,
-    isCuotaSuggestion: true,
-  })).filter(s=>!f.addedKeys.has(s.key));
+  const pendingCuotas = allCuotas.filter(g=>{
+    // Include active cuotas AND the final installment (maxPaid === total-1, next is the last)
+    const nextNum = g.maxPaid+1;
+    return nextNum <= g.total;
+  }).map(g=>{
+    const nextNum = g.maxPaid+1;
+    const isLast = nextNum === g.total;
+    return {
+      key: g.baseName.toLowerCase().replace(/\s+/g,""),
+      label: g.baseName+" "+nextNum+"/"+g.total,
+      sublabel: isLast ? "⭐ Última cuota" : null,
+      amount: g.amount,
+      category: g.category,
+      medio: g.medio,
+      detail: g.baseName+" "+nextNum+"/"+g.total,
+      isCuotaSuggestion: true,
+      isLast,
+    };
+  }).filter(s=>!f.addedKeys.has(s.key));
 
   // 2. Recurring expenses: non-cuota items that appear in 2+ different months
   const recurringMap = {};
@@ -936,15 +946,15 @@ function buildAddTarjeta() {
 
     pendingCuotas.forEach(s=>{
       const cat = getCat(s.category);
-      const row = h("div",{style:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background:"#13131f",border:"1px solid rgba(99,102,241,0.3)",borderRadius:"12px",marginBottom:"8px",cursor:"pointer"}},
+      const row = h("div",{style:{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",background: s.isLast?"#1a0a00":"#13131f",border:`1px solid ${s.isLast?"rgba(245,158,11,0.4)":"rgba(99,102,241,0.3)"}`,borderRadius:"12px",marginBottom:"8px",cursor:"pointer"}},
         h("span",{style:{fontSize:"20px"}},cat?.emoji||"💳"),
         h("div",{style:{flex:"1"}},
           h("span",{style:{display:"block",fontSize:"14px",fontWeight:"600",color:"#e2e8f0"}},s.label),
-          h("span",{style:{display:"block",fontSize:"12px",color:"#64748b"}},cat?.label||"")
+          h("span",{style:{display:"block",fontSize:"12px",color:s.isLast?"#f59e0b":"#64748b"}},s.isLast?"⭐ Última cuota":cat?.label||"")
         ),
         h("div",{style:{textAlign:"right"}},
           h("span",{style:{display:"block",fontSize:"14px",fontWeight:"700",color:"#f87171"}},fmtMoney(s.amount)),
-          h("span",{style:{fontSize:"11px",color:"#6366f1"}},"+ agregar")
+          h("span",{style:{fontSize:"11px",color:s.isLast?"#f59e0b":"#6366f1"}},s.isLast?"+ agregar":"+ agregar")
         )
       );
       row.onclick = () => {
