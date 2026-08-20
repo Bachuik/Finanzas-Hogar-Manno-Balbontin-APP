@@ -443,27 +443,75 @@ function buildHome() {
   );
 
   let content;
-  if(state.homeTab==="resumen") content = buildResumen(catBreakdown,totalExpense,medios,impuestosTotal);
+  if(state.homeTab==="resumen") content = buildResumen(catBreakdown,totalExpense,medios,impuestosTotal,monthTxs,monthCuotas);
   else if(state.homeTab==="movimientos") content = buildMovimientos(monthTxs,monthCuotas);
   else content = buildCuotasPanel(state.transactions);
 
   return h("div",{class:"screen"}, header, fabs, tabs, h("div",{class:"content"},content));
 }
 
-function buildResumen(catBreakdown,totalExpense,medios,impuestosTotal) {
+function buildResumen(catBreakdown,totalExpense,medios,impuestosTotal,monthTxs,monthCuotas) {
   const wrap = h("div",{});
   if(!catBreakdown.length) { wrap.appendChild(h("div",{class:"empty"},"Sin gastos este mes todavía")); return wrap; }
 
+  if(!state.openCat) state.openCat = null;
+
   catBreakdown.forEach(c=>{
     const pct = totalExpense>0?Math.round(c.total/totalExpense*100):0;
+    const isOpen = state.openCat === c.id;
+
     const top = h("div",{class:"cat-top"},
       h("span",{class:"cat-emoji"},c.emoji),
       h("span",{class:"cat-name"},c.label),
       ...(c.fromCuotas>0?[h("span",{class:"cuota-tag"},"🔁 "+fmtMoney(c.fromCuotas)+" en cuotas")]:[])
     );
-    const nums = h("div",{class:"cat-nums"},h("span",{class:"cat-amount"},fmtMoney(c.total)),h("span",{class:"cat-pct"},pct+"%"));
+    const nums = h("div",{class:"cat-nums"},
+      h("span",{class:"cat-amount"},fmtMoney(c.total)),
+      h("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
+        h("span",{class:"cat-pct"},pct+"%"),
+        h("span",{style:{fontSize:"11px",color:"#475569"}},isOpen?"▲":"▼")
+      )
+    );
     const bar = h("div",{class:"bar-bg"},h("div",{class:"bar-fill",style:{width:pct+"%",background:c.color}}));
-    wrap.appendChild(h("div",{class:"cat-row"},top,nums,bar));
+
+    const catRow = h("div",{class:"cat-row",style:{cursor:"pointer"}},top,nums,bar);
+    catRow.onclick = ()=>{
+      state.openCat = isOpen ? null : c.id;
+      render();
+    };
+    wrap.appendChild(catRow);
+
+    // Detail panel
+    if(isOpen) {
+      const txs = monthTxs.filter(t=>t.type==="expense"&&t.category===c.id);
+      const cuotas = (monthCuotas||[]).filter(q=>q.category===c.id);
+      const allItems = [...txs.map(t=>({label:t.detail||c.label,amount:t.amount,medio:t.medio,isCuota:false})),
+                       ...cuotas.map(q=>({label:(q.detail||c.label)+" ("+q.cuotaNum+"/"+q.totalCuotas+")",amount:q.amount,medio:q.medio,isCuota:true}))];
+
+      const panel = h("div",{style:{background:"#13131f",border:"1px solid "+c.color+"44",borderRadius:"12px",padding:"12px",marginBottom:"8px",marginTop:"-4px"}});
+
+      if(!allItems.length) {
+        panel.appendChild(h("div",{style:{color:"#475569",fontSize:"13px"}},"Sin movimientos"));
+      } else {
+        allItems.forEach(item=>{
+          const row = h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #1e293b"}},
+            h("div",{style:{flex:"1",minWidth:"0"}},
+              h("span",{style:{display:"block",fontSize:"13px",color:"#e2e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},
+                (item.isCuota?"🔁 ":"")+item.label),
+              h("span",{style:{fontSize:"11px",color:"#475569"}},item.medio||"")
+            ),
+            h("span",{style:{fontSize:"13px",fontWeight:"700",color:"#f87171",marginLeft:"8px",flexShrink:"0"}},fmtMoney(item.amount))
+          );
+          panel.appendChild(row);
+        });
+        // Total row
+        panel.appendChild(h("div",{style:{display:"flex",justifyContent:"space-between",padding:"8px 0 2px",marginTop:"4px"}},
+          h("span",{style:{fontSize:"13px",fontWeight:"700",color:"#94a3b8"}},"Total"),
+          h("span",{style:{fontSize:"14px",fontWeight:"800",color:c.color}},fmtMoney(c.total))
+        ));
+      }
+      wrap.appendChild(panel);
+    }
   });
 
   if(medios.length) {
